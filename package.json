@@ -1,0 +1,22 @@
+{
+  "name": "stefanieeleandro",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.12.0",
+  "scripts": {
+    "dev": "pnpm -F @leetete/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "deploy": "pnpm -F @leetete/web deploy",
+    "db:generate": "pnpm -F @leetete/api db:generate",
+    "db:migrate:local": "pnpm -F @leetete/web exec wrangler d1 migrations apply wedding-db --local",
+    "db:migrate:remote": "pnpm -F @leetete/web exec wrangler d1 migrations apply wedding-db --remote"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  }
+}

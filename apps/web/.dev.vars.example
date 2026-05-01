@@ -1,0 +1,15 @@
+S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+S3_BUCKET=wedding-media
+S3_REGION=auto
+S3_ACCESS_KEY_ID=
+S3_SECRET_ACCESS_KEY=
+S3_PUBLIC_BASE_URL=https://media.stefanieeleandro.pages.dev
+S3_FORCE_PATH_STYLE=false
+
+COUPLE_NAMES=Stefanie & Leandro
+PUBLIC_BASE_URL=http://localhost:5173
+
+TURNSTILE_SECRET=1x0000000000000000000000000000000AA
+CF_ACCESS_TEAM=yourteam.cloudflareaccess.com
+CF_ACCESS_AUD=
+ALLOWED_ADMIN_EMAILS=stefanie@example.com,leandro@example.com
