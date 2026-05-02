@@ -6,7 +6,7 @@ pages_build_output_dir = "dist"
 [[d1_databases]]
 binding = "DB"
 database_name = "wedding-db"
-database_id = "REPLACE_WITH_D1_ID"
+database_id = "81fac13f-00b2-49ec-b7df-bde036849e70"
 migrations_dir = "../api/migrations"
 
 [[r2_buckets]]
