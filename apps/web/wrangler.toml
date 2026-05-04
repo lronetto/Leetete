@@ -25,10 +25,11 @@ PUBLIC_BASE_URL = "https://stefanieeleandro.pages.dev"
 S3_REGION = "auto"
 S3_BUCKET = "wedding-media"
 S3_FORCE_PATH_STYLE = "false"
-# S3_ENDPOINT, S3_PUBLIC_BASE_URL, CF_ACCESS_TEAM, CF_ACCESS_AUD are
-# set after Cloudflare config (see deploy notes).
+S3_ENDPOINT = "https://04cc83318332b325076a71c8db5e6c42.r2.cloudflarestorage.com"
+S3_PUBLIC_BASE_URL = "https://pub-e29e475661ee460c99ba6ea01cf26a7c.r2.dev"
+# CF_ACCESS_TEAM, CF_ACCESS_AUD are set after the Cloudflare Access app is created.
 #
-# Secrets (set via `wrangler secret put <NAME>` or via the dashboard):
+# Secrets (set via dashboard or `wrangler secret put`):
 #   S3_ACCESS_KEY_ID
 #   S3_SECRET_ACCESS_KEY
 #   TURNSTILE_SECRET
