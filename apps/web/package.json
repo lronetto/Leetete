@@ -8,8 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "deploy": "wrangler pages deploy dist --project-name stefanieeleandro",
-    "pages:dev": "wrangler pages dev dist --compatibility-flags=nodejs_compat"
+    "deploy": "wrangler deploy",
+    "pages:dev": "wrangler dev"
   },
   "dependencies": {
     "@leetete/api": "workspace:*",

@@ -1,7 +1,13 @@
 name = "stefanieeleandro"
+main = "src/worker.ts"
 compatibility_date = "2026-04-01"
 compatibility_flags = ["nodejs_compat"]
-pages_build_output_dir = "dist"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
 
 [[d1_databases]]
 binding = "DB"
@@ -20,9 +26,9 @@ S3_REGION = "auto"
 S3_BUCKET = "wedding-media"
 S3_FORCE_PATH_STYLE = "false"
 # S3_ENDPOINT, S3_PUBLIC_BASE_URL, CF_ACCESS_TEAM, CF_ACCESS_AUD are
-# set after Cloudflare config (see README of deploy steps).
+# set after Cloudflare config (see deploy notes).
 #
-# Secrets (set via `wrangler pages secret put <NAME> --project-name stefanieeleandro`):
+# Secrets (set via `wrangler secret put <NAME>` or via the dashboard):
 #   S3_ACCESS_KEY_ID
 #   S3_SECRET_ACCESS_KEY
 #   TURNSTILE_SECRET
