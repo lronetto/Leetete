@@ -1,30 +1,213 @@
+import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
+import {
+  uploadConfirmSchema,
+  uploadInitSchema,
+  type UploadInitResponse,
+} from '@leetete/shared';
+import { getDb } from '../db/client.js';
+import { eventConfig, uploads } from '../db/schema.js';
 import type { Bindings } from '../env.js';
+import { hashIp, uploadId } from '../lib/ids.js';
+import { createStorage } from '../lib/storage-factory.js';
 
 export const uploadsRoutes = new Hono<Bindings>();
 
-// POST /api/uploads/init
-// Body: UploadInit (zod schema in @leetete/shared)
-// - validates Turnstile
-// - reads event_config (rejects if file too big / video disabled / over duration)
-// - decides single vs multipart based on sizeBytes (threshold ~50 MB)
-// - creates row in `uploads` (status pending)
-// - returns presigned PUT or multipart presigned URLs
+const SINGLE_PUT_MAX = 50 * 1024 * 1024;
+const PART_SIZE = 10 * 1024 * 1024;
+const KEY_PREFIX = 'uploads';
+const IP_HASH_SALT = 'wedding-uploads-v1';
+
+function extFromFilename(filename: string, mimeType: string): string {
+  const dot = filename.lastIndexOf('.');
+  if (dot >= 0 && dot < filename.length - 1) {
+    const ext = filename.slice(dot + 1).toLowerCase();
+    if (/^[a-z0-9]{1,6}$/.test(ext)) return ext;
+  }
+  const map: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/heic': 'heic',
+    'image/heif': 'heif',
+    'image/gif': 'gif',
+    'video/mp4': 'mp4',
+    'video/quicktime': 'mov',
+    'video/webm': 'webm',
+  };
+  return map[mimeType.toLowerCase()] ?? 'bin';
+}
+
+function buildKey(id: string, filename: string, mimeType: string): string {
+  const now = new Date();
+  const yyyy = now.getUTCFullYear();
+  const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
+  const ext = extFromFilename(filename, mimeType);
+  return `${KEY_PREFIX}/${yyyy}/${mm}/${id}.${ext}`;
+}
+
 uploadsRoutes.post('/init', async (c) => {
-  return c.json({ error: 'not_implemented' }, 501);
+  const body = await c.req.json().catch(() => null);
+  const parsed = uploadInitSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: 'invalid_body', details: parsed.error.flatten() }, 400);
+  }
+  const input = parsed.data;
+
+  const db = getDb(c.env.DB);
+  const cfg = await db.select().from(eventConfig).where(eq(eventConfig.id, 1)).get();
+  if (!cfg) return c.json({ error: 'not_configured' }, 500);
+
+  const isVideo = input.mimeType.startsWith('video/');
+  if (isVideo && !cfg.allowVideo) {
+    return c.json({ error: 'video_not_allowed' }, 400);
+  }
+  if (input.sizeBytes > cfg.maxFileMb * 1024 * 1024) {
+    return c.json({ error: 'file_too_large', maxFileMb: cfg.maxFileMb }, 400);
+  }
+  if (
+    isVideo &&
+    input.durationSeconds !== undefined &&
+    input.durationSeconds > cfg.maxVideoSeconds
+  ) {
+    return c.json({ error: 'video_too_long', maxVideoSeconds: cfg.maxVideoSeconds }, 400);
+  }
+
+  const id = uploadId();
+  const storageKey = buildKey(id, input.filename, input.mimeType);
+  const storage = createStorage(c.env);
+  const ip =
+    c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? 'unknown';
+  const ipHashValue = await hashIp(ip, IP_HASH_SALT);
+
+  const initialStatus = cfg.moderation === 'pre' ? 'pending' : 'approved';
+  const approvedAt = initialStatus === 'approved' ? Date.now() : null;
+
+  if (input.sizeBytes <= SINGLE_PUT_MAX) {
+    const presigned = await storage.presignPut({
+      key: storageKey,
+      contentType: input.mimeType,
+      contentLength: input.sizeBytes,
+      expiresInSec: 900,
+    });
+
+    await db.insert(uploads).values({
+      id,
+      storageKey,
+      mimeType: input.mimeType,
+      sizeBytes: input.sizeBytes,
+      durationSeconds: input.durationSeconds ?? null,
+      authorName: input.authorName?.trim() || null,
+      message: input.message?.trim() || null,
+      status: initialStatus,
+      source: 'guest',
+      ipHash: ipHashValue,
+      approvedAt,
+    });
+
+    const response: UploadInitResponse = {
+      uploadId: id,
+      storageKey,
+      mode: 'single',
+      putUrl: presigned.url,
+      putHeaders: presigned.headers,
+    };
+    return c.json(response);
+  }
+
+  const partCount = Math.ceil(input.sizeBytes / PART_SIZE);
+  const multipart = await storage.initMultipart({
+    key: storageKey,
+    contentType: input.mimeType,
+    partCount,
+    expiresInSec: 3600 * 6,
+  });
+
+  await db.insert(uploads).values({
+    id,
+    storageKey,
+    mimeType: input.mimeType,
+    sizeBytes: input.sizeBytes,
+    durationSeconds: input.durationSeconds ?? null,
+    authorName: input.authorName?.trim() || null,
+    message: input.message?.trim() || null,
+    status: 'pending',
+    source: 'guest',
+    ipHash: ipHashValue,
+    providerUploadId: multipart.uploadId,
+  });
+
+  const response: UploadInitResponse = {
+    uploadId: id,
+    storageKey,
+    mode: 'multipart',
+    multipart: {
+      providerUploadId: multipart.uploadId,
+      partSize: multipart.partSize,
+      partUrls: multipart.partUrls,
+    },
+  };
+  return c.json(response);
 });
 
-// POST /api/uploads/:id/confirm
-// Body: UploadConfirm
-// - if multipart: completeMultipart on storage
-// - verifies object exists via head()
-// - sets status based on event_config.moderation
 uploadsRoutes.post('/:id/confirm', async (c) => {
-  return c.json({ error: 'not_implemented' }, 501);
+  const id = c.req.param('id');
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = uploadConfirmSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: 'invalid_body', details: parsed.error.flatten() }, 400);
+  }
+
+  const db = getDb(c.env.DB);
+  const upload = await db.select().from(uploads).where(eq(uploads.id, id)).get();
+  if (!upload) return c.json({ error: 'not_found' }, 404);
+  if (upload.status === 'approved') return c.json({ ok: true, alreadyApproved: true });
+
+  const cfg = await db.select().from(eventConfig).where(eq(eventConfig.id, 1)).get();
+  if (!cfg) return c.json({ error: 'not_configured' }, 500);
+
+  const storage = createStorage(c.env);
+
+  if (parsed.data.multipart) {
+    if (parsed.data.multipart.providerUploadId !== upload.providerUploadId) {
+      return c.json({ error: 'multipart_mismatch' }, 400);
+    }
+    await storage.completeMultipart({
+      key: upload.storageKey,
+      uploadId: parsed.data.multipart.providerUploadId,
+      parts: parsed.data.multipart.parts,
+    });
+  }
+
+  const head = await storage.head(upload.storageKey);
+  if (!head) {
+    return c.json({ error: 'not_uploaded' }, 400);
+  }
+
+  const finalStatus = cfg.moderation === 'pre' ? 'pending' : 'approved';
+  await db
+    .update(uploads)
+    .set({
+      status: finalStatus,
+      approvedAt: finalStatus === 'approved' ? Date.now() : null,
+    })
+    .where(eq(uploads.id, id));
+
+  return c.json({ ok: true, status: finalStatus });
 });
 
-// POST /api/uploads/:id/abort
-// Cancels a pending multipart upload (cleanup).
 uploadsRoutes.post('/:id/abort', async (c) => {
-  return c.json({ error: 'not_implemented' }, 501);
+  const id = c.req.param('id');
+  const db = getDb(c.env.DB);
+  const upload = await db.select().from(uploads).where(eq(uploads.id, id)).get();
+  if (!upload) return c.json({ error: 'not_found' }, 404);
+
+  if (upload.providerUploadId) {
+    const storage = createStorage(c.env);
+    await storage
+      .abortMultipart({ key: upload.storageKey, uploadId: upload.providerUploadId })
+      .catch(() => {});
+  }
+  await db.delete(uploads).where(eq(uploads.id, id));
+  return c.json({ ok: true });
 });

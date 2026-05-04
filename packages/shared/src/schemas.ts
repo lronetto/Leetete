@@ -24,7 +24,7 @@ export const uploadInitSchema = z.object({
   durationSeconds: z.number().int().positive().optional(),
   authorName: z.string().max(80).optional(),
   message: z.string().max(2000).optional(),
-  turnstileToken: z.string().min(1),
+  turnstileToken: z.string().min(1).optional(),
 });
 
 export type UploadInit = z.infer<typeof uploadInitSchema>;
