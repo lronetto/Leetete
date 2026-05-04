@@ -1,5 +1,6 @@
-import { and, count, desc, eq, lt, sum } from 'drizzle-orm';
+import { and, desc, eq, lt } from 'drizzle-orm';
 import { Hono } from 'hono';
+import { z } from 'zod';
 import {
   type AdminStats,
   type AdminUploadsResponse,
@@ -8,14 +9,47 @@ import {
 import { getDb } from '../db/client.js';
 import { eventConfig, uploads } from '../db/schema.js';
 import type { Bindings } from '../env.js';
-import { requireAdmin } from '../lib/auth.js';
+import {
+  createSession,
+  destroySession,
+  requireAdmin,
+  timingSafeEqual,
+} from '../lib/auth.js';
 import { createStorage } from '../lib/storage-factory.js';
 
 export const adminRoutes = new Hono<Bindings>();
 
-adminRoutes.use('*', requireAdmin);
-
 const ADMIN_PAGE_SIZE = 30;
+
+const loginSchema = z.object({
+  email: z.string().email().toLowerCase(),
+  password: z.string().min(1),
+});
+
+adminRoutes.post('/login', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = loginSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: 'invalid_body' }, 400);
+  }
+
+  const allowed = c.env.ALLOWED_ADMIN_EMAILS.split(',').map((e) => e.trim().toLowerCase());
+  const emailOk = allowed.includes(parsed.data.email);
+  const passwordOk = await timingSafeEqual(parsed.data.password, c.env.ADMIN_PASSWORD);
+  if (!emailOk || !passwordOk) {
+    return c.json({ error: 'unauthorized' }, 401);
+  }
+
+  await createSession(c, parsed.data.email);
+  return c.json({ ok: true, email: parsed.data.email });
+});
+
+adminRoutes.post('/logout', async (c) => {
+  destroySession(c);
+  return c.json({ ok: true });
+});
+
+adminRoutes.use('*', requireAdmin);
 
 adminRoutes.get('/me', (c) => c.json({ email: c.get('adminEmail') }));
 

@@ -16,9 +16,10 @@ export interface AppEnv {
   EVENT_DATE?: string;
   PUBLIC_BASE_URL: string;
 
-  TURNSTILE_SECRET: string;
-  CF_ACCESS_TEAM: string;
-  CF_ACCESS_AUD: string;
+  TURNSTILE_SECRET?: string;
+
+  ADMIN_PASSWORD: string;
+  SESSION_SECRET: string;
   ALLOWED_ADMIN_EMAILS: string;
 }
 

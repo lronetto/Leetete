@@ -1,92 +1,51 @@
 import type { Context, Next } from 'hono';
+import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
+import { sign, verify } from 'hono/jwt';
 import type { Bindings } from '../env.js';
 
-interface AccessJwtPayload {
-  email?: string;
-  sub?: string;
-  aud?: string | string[];
-  exp?: number;
-  iat?: number;
-}
+const COOKIE = 'wedding_admin';
+const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 
-interface JwtHeader {
-  alg: string;
-  kid: string;
-  typ?: string;
+interface SessionPayload {
+  email: string;
+  exp: number;
 }
 
 export async function requireAdmin(c: Context<Bindings>, next: Next) {
-  const token = c.req.header('cf-access-jwt-assertion');
+  const token = getCookie(c, COOKIE);
   if (!token) return c.json({ error: 'unauthorized' }, 401);
-
-  const payload = await verifyAccessJwt(token, c.env.CF_ACCESS_TEAM, c.env.CF_ACCESS_AUD);
-  if (!payload?.email) return c.json({ error: 'unauthorized' }, 401);
-
-  const allowed = c.env.ALLOWED_ADMIN_EMAILS.split(',').map((s) => s.trim().toLowerCase());
-  if (!allowed.includes(payload.email.toLowerCase())) {
-    return c.json({ error: 'forbidden' }, 403);
-  }
-  c.set('adminEmail', payload.email);
-  await next();
-}
-
-async function verifyAccessJwt(
-  token: string,
-  team: string,
-  expectedAud: string,
-): Promise<AccessJwtPayload | null> {
-  const parts = token.split('.');
-  if (parts.length !== 3) return null;
-  const [headerB64, payloadB64, sigB64] = parts as [string, string, string];
-
-  let header: JwtHeader;
-  let payload: AccessJwtPayload;
   try {
-    header = JSON.parse(b64urlDecodeString(headerB64)) as JwtHeader;
-    payload = JSON.parse(b64urlDecodeString(payloadB64)) as AccessJwtPayload;
+    const payload = (await verify(token, c.env.SESSION_SECRET, 'HS256')) as unknown as SessionPayload;
+    if (!payload.email) return c.json({ error: 'unauthorized' }, 401);
+    c.set('adminEmail', payload.email);
+    await next();
   } catch {
-    return null;
+    return c.json({ error: 'unauthorized' }, 401);
   }
-
-  const audOk = Array.isArray(payload.aud)
-    ? payload.aud.includes(expectedAud)
-    : payload.aud === expectedAud;
-  if (!audOk) return null;
-  if (payload.exp && payload.exp * 1000 < Date.now()) return null;
-
-  const certsRes = await fetch(`https://${team}/cdn-cgi/access/certs`);
-  if (!certsRes.ok) return null;
-  const certs = (await certsRes.json()) as { keys: Array<JsonWebKey & { kid?: string }> };
-  const jwk = certs.keys.find((k) => k.kid === header.kid);
-  if (!jwk) return null;
-
-  const cryptoKey = await crypto.subtle.importKey(
-    'jwk',
-    jwk,
-    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-    false,
-    ['verify'],
-  );
-  const data = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
-  const valid = await crypto.subtle.verify(
-    'RSASSA-PKCS1-v1_5',
-    cryptoKey,
-    b64urlDecode(sigB64),
-    data,
-  );
-  return valid ? payload : null;
 }
 
-function b64urlDecode(s: string): Uint8Array<ArrayBuffer> {
-  const pad = s.length % 4 === 0 ? '' : '='.repeat(4 - (s.length % 4));
-  const b64 = (s + pad).replace(/-/g, '+').replace(/_/g, '/');
-  const bin = atob(b64);
-  const buf = new ArrayBuffer(bin.length);
-  const out = new Uint8Array(buf);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
+export async function createSession(c: Context<Bindings>, email: string) {
+  const exp = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS;
+  const token = await sign({ email, exp }, c.env.SESSION_SECRET, 'HS256');
+  setCookie(c, COOKIE, token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'Lax',
+    path: '/',
+    maxAge: SESSION_TTL_SECONDS,
+  });
 }
 
-function b64urlDecodeString(s: string): string {
-  return new TextDecoder().decode(b64urlDecode(s));
+export function destroySession(c: Context<Bindings>) {
+  deleteCookie(c, COOKIE, { path: '/' });
+}
+
+export async function timingSafeEqual(a: string, b: string): Promise<boolean> {
+  if (a.length !== b.length) return false;
+  const enc = new TextEncoder();
+  const aBytes = enc.encode(a);
+  const bBytes = enc.encode(b);
+  let result = 0;
+  for (let i = 0; i < aBytes.length; i++) result |= aBytes[i]! ^ bBytes[i]!;
+  return result === 0;
 }

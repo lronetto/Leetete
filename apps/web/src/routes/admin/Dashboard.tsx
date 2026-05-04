@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import type {
   AdminStats,
   AdminUpload,
@@ -36,8 +36,8 @@ function formatDate(ts: number): string {
 }
 
 export default function AdminDashboard() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState<string | null>(null);
-  const [authError, setAuthError] = useState<string | null>(null);
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [event, setEvent] = useState<AdminEvent | null>(null);
   const [uploads, setUploads] = useState<AdminUpload[]>([]);
@@ -54,14 +54,14 @@ export default function AdminDashboard() {
     fetch('/api/admin/me', { credentials: 'include' })
       .then(async (r) => {
         if (r.status === 401 || r.status === 403) {
-          setAuthError('Você não tem acesso a este painel.');
+          navigate('/admin/login', { replace: true });
           return null;
         }
         return r.json() as Promise<{ email: string }>;
       })
       .then((d) => d && setEmail(d.email))
-      .catch(() => setAuthError('Falha ao verificar identidade.'));
-  }, []);
+      .catch(() => navigate('/admin/login', { replace: true }));
+  }, [navigate]);
 
   useEffect(() => {
     if (!email) return;
@@ -160,26 +160,17 @@ export default function AdminDashboard() {
     setEventDirty(true);
   }
 
-  if (authError) {
-    return (
-      <main className="min-h-full flex items-center justify-center p-6 text-center">
-        <div>
-          <h2 className="font-display text-2xl text-stone-800 mb-2">Sem acesso</h2>
-          <p className="text-stone-600">{authError}</p>
-          <Link to="/" className="mt-4 inline-block text-sm text-stone-500 underline">
-            Voltar pra página inicial
-          </Link>
-        </div>
-      </main>
-    );
-  }
-
   if (!email) {
     return (
       <main className="min-h-full flex items-center justify-center p-6 text-stone-500">
         Carregando…
       </main>
     );
+  }
+
+  async function logout() {
+    await fetch('/api/admin/logout', { method: 'POST', credentials: 'include' });
+    navigate('/admin/login', { replace: true });
   }
 
   return (
@@ -189,12 +180,13 @@ export default function AdminDashboard() {
           <h1 className="font-display text-3xl text-stone-800">Painel dos noivos</h1>
           <p className="text-xs text-stone-500 mt-1">Logado como {email}</p>
         </div>
-        <a
-          href="/cdn-cgi/access/logout"
+        <button
+          type="button"
+          onClick={logout}
           className="text-sm text-stone-500 hover:text-stone-700 underline"
         >
           Sair
-        </a>
+        </button>
       </header>
 
       {stats && (
