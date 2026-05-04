@@ -80,9 +80,6 @@ uploadsRoutes.post('/init', async (c) => {
     c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? 'unknown';
   const ipHashValue = await hashIp(ip, IP_HASH_SALT);
 
-  const initialStatus = cfg.moderation === 'pre' ? 'pending' : 'approved';
-  const approvedAt = initialStatus === 'approved' ? Date.now() : null;
-
   if (input.sizeBytes <= SINGLE_PUT_MAX) {
     const presigned = await storage.presignPut({
       key: storageKey,
@@ -99,10 +96,9 @@ uploadsRoutes.post('/init', async (c) => {
       durationSeconds: input.durationSeconds ?? null,
       authorName: input.authorName?.trim() || null,
       message: input.message?.trim() || null,
-      status: initialStatus,
+      status: 'pending',
       source: 'guest',
       ipHash: ipHashValue,
-      approvedAt,
     });
 
     const response: UploadInitResponse = {
