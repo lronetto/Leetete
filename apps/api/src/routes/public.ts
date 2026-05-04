@@ -4,6 +4,8 @@ import type { GalleryResponse } from '@leetete/shared';
 import { getDb } from '../db/client.js';
 import { eventConfig, uploads } from '../db/schema.js';
 import type { Bindings } from '../env.js';
+import { generateQrPng, generateQrSvg } from '../lib/qrcode.js';
+import { generateQrPdf } from '../lib/qr-pdf.js';
 import { createStorage } from '../lib/storage-factory.js';
 
 export const publicRoutes = new Hono<Bindings>();
@@ -68,6 +70,53 @@ publicRoutes.get('/gallery', async (c) => {
 
   const nextCursor = hasMore ? String(slice[slice.length - 1]!.createdAt) : null;
   return c.json({ items, nextCursor } satisfies GalleryResponse);
+});
+
+publicRoutes.get('/qrcode', async (c) => {
+  const format = (c.req.query('format') ?? 'png').toLowerCase();
+  const overrideUrl = c.req.query('url');
+
+  const reqUrl = new URL(c.req.url);
+  const base =
+    overrideUrl ??
+    c.env.PUBLIC_BASE_URL ??
+    `${reqUrl.protocol}//${reqUrl.host}`;
+  const target = base.replace(/\/$/, '') + '/enviar';
+
+  if (format === 'svg') {
+    const svg = await generateQrSvg(target);
+    return new Response(svg, {
+      headers: {
+        'content-type': 'image/svg+xml; charset=utf-8',
+        'cache-control': 'public, max-age=300',
+      },
+    });
+  }
+
+  if (format === 'pdf') {
+    const db = getDb(c.env.DB);
+    const cfg = await db.select().from(eventConfig).where(eq(eventConfig.id, 1)).get();
+    const pdf = await generateQrPdf({
+      url: target,
+      coupleNames: cfg?.coupleNames ?? c.env.COUPLE_NAMES,
+      eventDate: cfg?.eventDate ?? c.env.EVENT_DATE,
+    });
+    return new Response(pdf as BodyInit, {
+      headers: {
+        'content-type': 'application/pdf',
+        'content-disposition': 'inline; filename="qr-mesa.pdf"',
+        'cache-control': 'no-store',
+      },
+    });
+  }
+
+  const png = await generateQrPng(target, 800);
+  return new Response(png as BodyInit, {
+    headers: {
+      'content-type': 'image/png',
+      'cache-control': 'public, max-age=300',
+    },
+  });
 });
 
 publicRoutes.get('/stats', async (c) => {
