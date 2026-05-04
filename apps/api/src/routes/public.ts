@@ -77,10 +77,7 @@ publicRoutes.get('/qrcode', async (c) => {
   const overrideUrl = c.req.query('url');
 
   const reqUrl = new URL(c.req.url);
-  const base =
-    overrideUrl ??
-    c.env.PUBLIC_BASE_URL ??
-    `${reqUrl.protocol}//${reqUrl.host}`;
+  const base = overrideUrl ?? `${reqUrl.protocol}//${reqUrl.host}`;
   const target = base.replace(/\/$/, '') + '/enviar';
 
   if (format === 'svg') {

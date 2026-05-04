@@ -21,7 +21,7 @@ bucket_name = "wedding-media"
 
 [vars]
 COUPLE_NAMES = "Stefanie & Leandro"
-PUBLIC_BASE_URL = "https://stefanieeleandro.pages.dev"
+PUBLIC_BASE_URL = "https://stefanieeleandro.lronetto.workers.dev"
 S3_REGION = "auto"
 S3_BUCKET = "wedding-media"
 S3_FORCE_PATH_STYLE = "true"
