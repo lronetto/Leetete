@@ -17,6 +17,43 @@ export type EventConfig = z.infer<typeof eventConfigSchema>;
 export const eventConfigUpdateSchema = eventConfigSchema.partial();
 export type EventConfigUpdate = z.infer<typeof eventConfigUpdateSchema>;
 
+export const adminUploadSchema = z.object({
+  id: z.string(),
+  url: z.string().url(),
+  thumbnailUrl: z.string().url().nullable(),
+  mimeType: z.string(),
+  isVideo: z.boolean(),
+  sizeBytes: z.number().int(),
+  durationSeconds: z.number().int().nullable(),
+  authorName: z.string().nullable(),
+  message: z.string().nullable(),
+  status: z.enum(['pending', 'approved', 'rejected']),
+  source: z.enum(['guest', 'import']),
+  createdAt: z.number(),
+  approvedAt: z.number().nullable(),
+});
+
+export type AdminUpload = z.infer<typeof adminUploadSchema>;
+
+export const adminUploadsResponseSchema = z.object({
+  items: z.array(adminUploadSchema),
+  nextCursor: z.string().nullable(),
+});
+
+export type AdminUploadsResponse = z.infer<typeof adminUploadsResponseSchema>;
+
+export const adminStatsSchema = z.object({
+  total: z.number().int(),
+  approved: z.number().int(),
+  pending: z.number().int(),
+  rejected: z.number().int(),
+  photos: z.number().int(),
+  videos: z.number().int(),
+  totalBytes: z.number().int(),
+});
+
+export type AdminStats = z.infer<typeof adminStatsSchema>;
+
 export const uploadInitSchema = z.object({
   filename: z.string().min(1).max(255),
   mimeType: z.string().regex(/^(image|video)\/[a-z0-9.+-]+$/i),
