@@ -11,5 +11,18 @@ build/
 .env.*.local
 !.env.example
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+.python-version
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
 .vscode/
 .idea/
