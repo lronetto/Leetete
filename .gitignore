@@ -11,6 +11,9 @@ build/
 .env.*.local
 !.env.example
 
+# Backup output on the VPS
+backups/
+
 # Python
 __pycache__/
 *.pyc

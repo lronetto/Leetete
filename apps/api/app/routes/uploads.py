@@ -1,3 +1,4 @@
+import asyncio
 import time
 from datetime import UTC, datetime
 from typing import Annotated
@@ -10,6 +11,7 @@ from ..db.base import get_db
 from ..db.models import EventConfig, Upload
 from ..lib.ids import hash_ip, upload_id
 from ..lib.storage import storage
+from ..lib.transcode import heic_to_jpeg, is_heic, swap_extension_to_jpg
 from ..schemas.api import UploadConfirmIn, UploadInitIn
 
 router = APIRouter()
@@ -186,6 +188,23 @@ async def confirm_upload(upload_id: str, body: UploadConfirmIn, db: Db):
     head = await storage.head(row.storage_key)
     if head is None:
         raise HTTPException(400, detail="not_uploaded")
+
+    # Transparently transcode HEIC to JPEG so the gallery renders in any
+    # browser. Falls back to the original on any failure so an upload is
+    # never lost; admin can re-upload manually if needed.
+    if is_heic(row.mime_type):
+        try:
+            src_bytes = await storage.get_bytes(row.storage_key)
+            jpeg_bytes = await asyncio.to_thread(heic_to_jpeg, src_bytes)
+            new_key = swap_extension_to_jpg(row.storage_key)
+            await storage.put_bytes(new_key, jpeg_bytes, "image/jpeg")
+            if new_key != row.storage_key:
+                await storage.delete(row.storage_key)
+            row.storage_key = new_key
+            row.mime_type = "image/jpeg"
+            row.size_bytes = len(jpeg_bytes)
+        except Exception as e:  # noqa: BLE001
+            print(f"[transcode] HEIC->JPEG failed for {row.storage_key}: {e}")
 
     final_status = "pending" if cfg.moderation == "pre" else "approved"
     row.status = final_status

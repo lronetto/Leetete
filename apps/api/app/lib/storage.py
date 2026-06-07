@@ -154,5 +154,23 @@ class S3Storage:
 
         await asyncio.to_thread(_delete)
 
+    async def get_bytes(self, key: str) -> bytes:
+        def _get() -> bytes:
+            res = self._client.get_object(Bucket=self._bucket, Key=key)
+            return res["Body"].read()
+
+        return await asyncio.to_thread(_get)
+
+    async def put_bytes(self, key: str, data: bytes, content_type: str) -> None:
+        def _put() -> None:
+            self._client.put_object(
+                Bucket=self._bucket,
+                Key=key,
+                Body=data,
+                ContentType=content_type,
+            )
+
+        await asyncio.to_thread(_put)
+
 
 storage = S3Storage()
