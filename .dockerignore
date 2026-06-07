@@ -1,0 +1,16 @@
+node_modules
+**/node_modules
+.git
+.gitignore
+.dockerignore
+.env
+.env.local
+.env.*.local
+dist
+**/dist
+.cache
+.turbo
+*.log
+.DS_Store
+.vscode
+.idea
