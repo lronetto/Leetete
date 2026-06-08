@@ -1,0 +1,67 @@
+services:
+  gitea:
+    image: gitea/gitea:1.22
+    container_name: gitea
+    restart: unless-stopped
+    environment:
+      USER_UID: "1000"
+      USER_GID: "1000"
+      TZ: ${TZ:-America/Sao_Paulo}
+      # Banco em postgres compartilhado (stack main/)
+      GITEA__database__DB_TYPE: postgres
+      GITEA__database__HOST: postgres:5432
+      GITEA__database__NAME: ${GITEA_DB_NAME:-gitea}
+      GITEA__database__USER: ${GITEA_DB_USER:-gitea}
+      GITEA__database__PASSWD: ${GITEA_DB_PASSWORD}
+      # Servidor
+      GITEA__server__DOMAIN: gitea.${DOMAIN_BASE:-localhost}
+      GITEA__server__ROOT_URL: https://gitea.${DOMAIN_BASE:-localhost}/
+      GITEA__server__SSH_DOMAIN: gitea.${DOMAIN_BASE:-localhost}
+      GITEA__server__SSH_LISTEN_PORT: "22"
+      GITEA__server__SSH_PORT: "${GITEA_SSH_PORT:-2222}"
+      GITEA__server__HTTP_PORT: "3000"
+      # Cache (Redis compartilhado)
+      GITEA__cache__ENABLED: "true"
+      GITEA__cache__ADAPTER: redis
+      GITEA__cache__HOST: redis://redis:6379/0
+      # Sessões em Redis também
+      GITEA__session__PROVIDER: redis
+      GITEA__session__PROVIDER_CONFIG: redis://redis:6379/1
+      # Service
+      GITEA__service__DISABLE_REGISTRATION: ${GITEA_DISABLE_REGISTRATION:-true}
+      GITEA__service__REQUIRE_SIGNIN_VIEW: ${GITEA_REQUIRE_SIGNIN:-false}
+      # Actions
+      GITEA__actions__ENABLED: "true"
+      GITEA__actions__DEFAULT_ACTIONS_URL: github
+    ports:
+      # SSH pra git push/pull. UI passa pelo Caddy (porta 443).
+      - "${GITEA_SSH_PORT:-2222}:22"
+    volumes:
+      - ./gitea/data:/var/lib/gitea
+      - ./gitea/config:/etc/gitea
+    networks:
+      - infra-net
+
+  runner:
+    build:
+      context: ./runner
+    container_name: gitea_runner
+    restart: unless-stopped
+    depends_on:
+      - gitea
+    environment:
+      TZ: ${TZ:-America/Sao_Paulo}
+      GITEA_INSTANCE_URL: http://gitea:3000
+      GITEA_RUNNER_REGISTRATION_TOKEN: ${GITEA_RUNNER_TOKEN:-}
+      GITEA_RUNNER_NAME: ${GITEA_RUNNER_NAME:-local-runner}
+      GITEA_RUNNER_LABELS: ${GITEA_RUNNER_LABELS:-ubuntu-latest:docker://catthehacker/ubuntu:act-22.04,node:docker://node:22-alpine,python:docker://python:3.12-slim}
+    volumes:
+      - ./runner/data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - infra-net
+
+networks:
+  infra-net:
+    external: true
+    name: infra-net

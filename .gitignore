@@ -11,9 +11,6 @@ build/
 .env.*.local
 !.env.example
 
-# Backup output on the VPS
-backups/
-
 # Python
 __pycache__/
 *.pyc
@@ -26,6 +23,18 @@ venv/
 .pytest_cache/
 .ruff_cache/
 *.egg-info/
+
+# Diretórios de dados (bind mounts dos volumes Docker)
+infra/main/postgres/data/
+infra/main/redis/data/
+infra/main/minio/data/
+infra/main/pgadmin/data/
+infra/main/caddy/data/
+infra/main/caddy/config/
+infra/gitea/gitea/data/
+infra/gitea/gitea/config/
+infra/gitea/runner/data/
+infra/wedding_photo/backups/
 
 .vscode/
 .idea/

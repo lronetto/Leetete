@@ -1,0 +1,50 @@
+{
+	email {$ACME_EMAIL}
+	# Em dev local (*.localhost) Caddy emite cert interno automaticamente.
+	# Em produção, Let's Encrypt entra pelos hostnames reais.
+}
+
+# ----- Gitea (UI + git over HTTPS) -----
+gitea.{$DOMAIN_BASE} {
+	encode zstd gzip
+	reverse_proxy gitea:3000 {
+		transport http {
+			response_header_timeout 10m
+			dial_timeout 30s
+		}
+	}
+}
+
+# ----- Wedding (app dos noivos) -----
+wedding.{$DOMAIN_BASE} {
+	encode zstd gzip
+	request_body {
+		max_size 600MB
+	}
+	reverse_proxy wedding_app:3000 {
+		transport http {
+			response_header_timeout 10m
+			dial_timeout 30s
+		}
+	}
+}
+
+# ----- pgAdmin -----
+pgadmin.{$DOMAIN_BASE} {
+	encode gzip
+	reverse_proxy pgadmin:80
+}
+
+# ----- MinIO console (admin web) -----
+minio.{$DOMAIN_BASE} {
+	encode gzip
+	reverse_proxy minio:9001
+}
+
+# ----- MinIO S3 API público (uploads/downloads do bucket) -----
+media.{$DOMAIN_BASE} {
+	encode gzip
+	reverse_proxy minio:9000 {
+		header_up Host {upstream_hostport}
+	}
+}

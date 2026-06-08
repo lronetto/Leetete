@@ -1,0 +1,81 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wedding_app
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${WEDDING_DB_USER:-wedding}:${WEDDING_DB_PASSWORD}@postgres:5432/${WEDDING_DB_NAME:-wedding}
+      # Endpoint pra assinar/servir uploads pelo browser. Em prod usa
+      # https://media.{DOMAIN_BASE}. Em dev local também — o app acessa via
+      # extra_hosts -> host gateway -> Caddy -> minio.
+      S3_ENDPOINT: ${S3_ENDPOINT:-https://media.${DOMAIN_BASE:-localhost}}
+      S3_BUCKET: ${WEDDING_BUCKET:-wedding-media}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-https://media.${DOMAIN_BASE:-localhost}/${WEDDING_BUCKET:-wedding-media}}
+      S3_FORCE_PATH_STYLE: "true"
+      COUPLE_NAMES: ${COUPLE_NAMES:-Stefanie & Leandro}
+      EVENT_DATE: ${EVENT_DATE:-}
+      PUBLIC_BASE_URL: https://wedding.${DOMAIN_BASE:-localhost}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      SESSION_SECRET: ${SESSION_SECRET}
+      ALLOWED_ADMIN_EMAILS: ${ALLOWED_ADMIN_EMAILS}
+      AUTO_MIGRATE: "true"
+      NODE_ENV: production
+      PORT: "3000"
+    # Em dev local, faz `media.localhost` (e o domínio do site) apontarem pro
+    # host gateway, pra o app dentro do container alcançar o Caddy do main/.
+    extra_hosts:
+      - "media.${DOMAIN_BASE:-localhost}:host-gateway"
+      - "wedding.${DOMAIN_BASE:-localhost}:host-gateway"
+    networks:
+      - infra-net
+
+  postgres-backup:
+    image: prodrigestivill/postgres-backup-local:16-alpine
+    container_name: wedding_pg_backup
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${WEDDING_DB_NAME:-wedding}
+      POSTGRES_USER: ${WEDDING_DB_USER:-wedding}
+      POSTGRES_PASSWORD: ${WEDDING_DB_PASSWORD}
+      POSTGRES_EXTRA_OPTS: "--clean --if-exists"
+      SCHEDULE: ${BACKUP_SCHEDULE_DB:-@daily}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+      BACKUP_KEEP_WEEKS: ${BACKUP_KEEP_WEEKS:-4}
+      BACKUP_KEEP_MONTHS: ${BACKUP_KEEP_MONTHS:-6}
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      - ./backups/postgres:/backups
+    networks:
+      - infra-net
+
+  media-backup:
+    image: alpine:3.20
+    container_name: wedding_media_backup
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      S3_BUCKET: ${WEDDING_BUCKET:-wedding-media}
+      BACKUP_SCHEDULE_MEDIA: ${BACKUP_SCHEDULE_MEDIA:-0 3 * * *}
+      BACKUP_REMOTE_ENDPOINT: ${BACKUP_REMOTE_ENDPOINT:-}
+      BACKUP_REMOTE_ACCESS_KEY: ${BACKUP_REMOTE_ACCESS_KEY:-}
+      BACKUP_REMOTE_SECRET_KEY: ${BACKUP_REMOTE_SECRET_KEY:-}
+      BACKUP_REMOTE_BUCKET: ${BACKUP_REMOTE_BUCKET:-}
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      - ./backups/media:/backups
+      - ./infra/backup:/scripts:ro
+    entrypoint: ["/bin/sh", "/scripts/media-backup-entrypoint.sh"]
+    networks:
+      - infra-net
+
+networks:
+  infra-net:
+    external: true
+    name: infra-net
