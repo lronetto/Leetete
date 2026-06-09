@@ -30,6 +30,8 @@ services:
       # Service
       GITEA__service__DISABLE_REGISTRATION: ${GITEA_DISABLE_REGISTRATION:-true}
       GITEA__service__REQUIRE_SIGNIN_VIEW: ${GITEA_REQUIRE_SIGNIN:-false}
+      # Pula a tela /install no primeiro boot (toda config vem via env).
+      GITEA__security__INSTALL_LOCK: "true"
       # Actions
       GITEA__actions__ENABLED: "true"
       GITEA__actions__DEFAULT_ACTIONS_URL: github
@@ -37,8 +39,7 @@ services:
       # SSH pra git push/pull. UI passa pelo Caddy (porta 443).
       - "${GITEA_SSH_PORT:-2222}:22"
     volumes:
-      - ./gitea/data:/var/lib/gitea
-      - ./gitea/config:/etc/gitea
+      - ./gitea/data:/data
     networks:
       - infra-net
 

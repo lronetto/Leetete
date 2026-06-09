@@ -32,7 +32,6 @@ infra/main/pgadmin/data/
 infra/main/caddy/data/
 infra/main/caddy/config/
 infra/gitea/gitea/data/
-infra/gitea/gitea/config/
 infra/gitea/runner/data/
 infra/wedding_photo/backups/
 
